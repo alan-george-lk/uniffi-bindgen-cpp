@@ -13,6 +13,12 @@ Newer Rust versions should also work fine.
 cargo install uniffi-bindgen-cpp --git https://github.com/NordSecurity/uniffi-bindgen-cpp --tag v0.8.1+v0.29.4
 ```
 
+For this UniFFI 0.31/async development branch, install directly from the checkout:
+
+```bash
+cargo install --path bindgen
+```
+
 # How to generate bindings
 
 ## Generating with a single UDL file
@@ -42,7 +48,12 @@ C++20 is required to compile the bindings.
 
 The following uniffi features are unsupported.
 
-* Async functions
+* Async callback-interface methods (async Rust functions, constructors, and object methods are supported)
+
+Async calls return a move-only `uniffi::Future<T>`. It supports `get()`, `wait()`, `wait_for()`,
+and `cancel()`. Destroying an incomplete future cancels it and releases the Rust future. See
+[the LiveKit integration notes](docs/LIVEKIT_INTEGRATION.md) for the migration shape and current
+tradeoffs.
 
 # Configuration options
 

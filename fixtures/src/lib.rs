@@ -23,3 +23,50 @@ mod uniffi_fixtures {
     uniffi_ext_types_export::uniffi_reexport_scaffolding!();
     uniffi_ext_types_import::uniffi_reexport_scaffolding!();
 }
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static ASYNC_PENDING_COUNT: AtomicU64 = AtomicU64::new(0);
+
+struct PendingGuard;
+
+impl Drop for PendingGuard {
+    fn drop(&mut self) {
+        ASYNC_PENDING_COUNT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[derive(Debug, uniffi::Error)]
+pub enum AsyncTestError {
+    Failed,
+}
+
+impl std::fmt::Display for AsyncTestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "async test failed")
+    }
+}
+
+impl std::error::Error for AsyncTestError {}
+
+#[uniffi::export]
+pub async fn async_fallible(fail: bool) -> Result<String, AsyncTestError> {
+    if fail {
+        Err(AsyncTestError::Failed)
+    } else {
+        Ok("async success".to_owned())
+    }
+}
+
+#[uniffi::export]
+pub async fn async_pending() {
+    ASYNC_PENDING_COUNT.fetch_add(1, Ordering::SeqCst);
+    let _guard = PendingGuard;
+    std::future::pending::<()>().await;
+}
+
+#[uniffi::export]
+pub fn async_pending_count() -> u64 {
+    ASYNC_PENDING_COUNT.load(Ordering::SeqCst)
+}
+
+uniffi::setup_scaffolding!();

@@ -73,6 +73,7 @@ test_case(empty_type)
 test_case(error_types_builtin)
 test_case(reserved_field_name)
 test_case(type_flattening)
+test_case(uniffi_bindgen_cpp_fixtures)
 
 add_executable(ext_types_import-test
     tests/ext_types_import/main.cpp

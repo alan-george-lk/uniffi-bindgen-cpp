@@ -447,7 +447,7 @@ void test_path() {
     ASSERT_EQ(2, traits[1]->strong_count());
 
     traits[0]->set_parent(traits[1]);
-    ASSERT_EQ(2, traits[1]->strong_count());
+    ASSERT_EQ(3, traits[1]->strong_count());
 
     ASSERT_EQ(std::vector<std::string> {"node-2"} , coverall::ancestor_names(traits[0]));
     ASSERT_EQ(std::vector<std::string> {} , coverall::ancestor_names(traits[1]));
@@ -510,6 +510,11 @@ void test_html_error() {
     EXPECT_EXCEPTION(coverall::validate_html("test"), coverall::HtmlError);
 }
 
+void test_async_function() {
+    ASSERT_EQ(true, coverall::async_bool(true).get());
+    ASSERT_EQ(false, coverall::async_bool(false).get());
+}
+
 int main() {
     test_some_dict();
     test_constructors();
@@ -533,6 +538,7 @@ int main() {
     test_round_tripping();
     test_rust_only_traits();
     test_html_error();
+    test_async_function();
 
     return 0;
 }

@@ -77,6 +77,8 @@ R rust_call(F f, EF error_cb, Args... args) {
     }
 }
 
+{% include "async.cpp" %}
+
 template <typename F, typename W>
 void rust_call_trait_interface(RustCallStatus* status, F make_call, W write_value) {
     initialize();
