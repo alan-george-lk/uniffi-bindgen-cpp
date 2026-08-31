@@ -49,6 +49,7 @@ impl Logger {
         });
     }
 
+    /// Log a debug message.
     pub fn debug(&self, message: String) {
         self.log_internal(LogEntry {
             timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
@@ -60,6 +61,8 @@ impl Logger {
 }
 
 impl Logger {
+    /// Internal function to log a message.
+    /// Determines log level and formats the message to console.
     fn log_internal(&self, entry: LogEntry) {
         let state = self.state.lock().unwrap();
         if entry.level < state.level {
