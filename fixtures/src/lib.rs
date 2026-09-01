@@ -24,7 +24,10 @@ mod uniffi_fixtures {
     uniffi_ext_types_export::uniffi_reexport_scaffolding!();
     uniffi_ext_types_import::uniffi_reexport_scaffolding!();
 }
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 static ASYNC_PENDING_COUNT: AtomicU64 = AtomicU64::new(0);
 
@@ -68,6 +71,55 @@ pub async fn async_pending() {
 #[uniffi::export]
 pub fn async_pending_count() -> u64 {
     ASYNC_PENDING_COUNT.load(Ordering::SeqCst)
+}
+
+#[derive(Debug, uniffi::Error)]
+pub enum AsyncParserError {
+    InvalidInteger,
+    Unexpected,
+}
+
+impl std::fmt::Display for AsyncParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidInteger => write!(f, "invalid integer"),
+            Self::Unexpected => write!(f, "unexpected callback error"),
+        }
+    }
+}
+
+impl std::error::Error for AsyncParserError {}
+
+impl From<uniffi::UnexpectedUniFFICallbackError> for AsyncParserError {
+    fn from(_: uniffi::UnexpectedUniFFICallbackError) -> Self {
+        Self::Unexpected
+    }
+}
+
+#[uniffi::export(with_foreign)]
+#[async_trait::async_trait]
+pub trait AsyncParser: Send + Sync {
+    async fn stringify(&self, value: i32) -> String;
+    async fn parse(&self, value: String) -> Result<i32, AsyncParserError>;
+    async fn wait(&self);
+}
+
+#[uniffi::export]
+pub async fn stringify_using_parser(parser: Arc<dyn AsyncParser>, value: i32) -> String {
+    parser.stringify(value).await
+}
+
+#[uniffi::export]
+pub async fn parse_using_parser(
+    parser: Arc<dyn AsyncParser>,
+    value: String,
+) -> Result<i32, AsyncParserError> {
+    parser.parse(value).await
+}
+
+#[uniffi::export]
+pub async fn wait_using_parser(parser: Arc<dyn AsyncParser>) {
+    parser.wait().await
 }
 
 uniffi::setup_scaffolding!();

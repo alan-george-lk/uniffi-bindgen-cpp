@@ -4,12 +4,23 @@
 {%- let ffi_converter_name = typ|ffi_converter_name %}
 {%- let canonical_type_name = typ|canonical_name %}
 {%- if obj.has_callback_interface() %}
+{%- if obj.has_async_method() %}
+struct {{ canonical_type_name }} {
+    virtual ~{{ canonical_type_name }}() = default;
+};
+{%- endif %}
 {%- let vtable = obj.vtable().expect("trait interface should have a vtable") %}
 {%- let vtable_methods = obj.vtable_methods() %}
 {%- let methods = obj.methods() %}
 {%- let ffi_init_callback = obj.ffi_init_callback() %}
 {%- let interface_docstring = obj.docstring() %}
+{%- if obj.has_async_method() %}
+{%- let interface_base_name = canonical_type_name %}
 {% include "callback.hpp" %}
+{%- else %}
+{%- let interface_base_name = "" %}
+{% include "callback.hpp" %}
+{%- endif %}
 {%- endif %}
 
 namespace uniffi {
@@ -22,7 +33,7 @@ struct {{ impl_class_name }}
     Since an interface being a callback interface or an error is mutually exclusive,
     we don't need to complex branching for multiple inheritance
 #}
-{% if obj.has_callback_interface() %} : public {{ interface_name }} {% endif %}
+{% if obj.has_callback_interface() %} : public {% if obj.has_async_method() %}{{ canonical_type_name }}{% else %}{{ interface_name }}{% endif %} {% endif %}
 {% if ci.is_name_used_as_error(name) %} : public std::exception {% endif %}
 {
     friend uniffi::{{ ffi_converter_name|class_name }};

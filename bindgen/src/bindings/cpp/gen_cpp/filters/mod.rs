@@ -158,7 +158,12 @@ impl CppCodeOracle {
         let class_name = self.class_name(obj.name());
         if obj.has_callback_interface() {
             let impl_name = format!("{class_name}Impl");
-            (class_name, impl_name)
+            let interface_name = if obj.has_async_method() {
+                format!("{class_name}Foreign")
+            } else {
+                class_name
+            };
+            (interface_name, impl_name)
         } else {
             (format!("I{class_name}"), class_name)
         }
@@ -357,6 +362,14 @@ pub(crate) fn ffi_type_name(ffi_type: &FfiType) -> Result<String> {
         FfiType::Reference(typ) => format!("const {} &", ffi_type_name(typ)?),
         FfiType::MutReference(typ) => format!("{} &", ffi_type_name(typ)?),
     })
+}
+
+pub(crate) fn ffi_field_type_name(ffi_type: &FfiType) -> Result<String> {
+    if matches!(ffi_type, FfiType::RustCallStatus) {
+        Ok("RustCallStatus".into())
+    } else {
+        ffi_type_name(ffi_type)
+    }
 }
 
 pub(crate) fn class_name(nm: &str) -> Result<String> {

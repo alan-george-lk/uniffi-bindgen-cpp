@@ -28,6 +28,14 @@ struct RustCallStatus {
 
 typedef void (*RustFutureContinuationCallback)(uint64_t callback_data, int8_t poll_result);
 
+{%- for ffi_struct in self.foreign_future_struct_definitions() %}
+struct {{ ffi_struct.name()|ffi_struct_name }} {
+    {%- for field in ffi_struct.fields() %}
+    {{ field.type_().borrow()|ffi_field_type_name }} {{ field.name()|var_name }};
+    {%- endfor %}
+};
+{%- endfor %}
+
 #endif
 
 {%- for def in self.scaffolding_definitions() %}
@@ -39,7 +47,7 @@ typedef void (*RustFutureContinuationCallback)(uint64_t callback_data, int8_t po
 {%- when FfiDefinition::Struct(ffi_struct) %}
 struct {{ ffi_struct.name()|ffi_struct_name }} {
     {%- for field in ffi_struct.fields() %}
-    {{ field.type_().borrow()|ffi_type_name }} {{ field.name()|var_name }};
+    {{ field.type_().borrow()|ffi_field_type_name }} {{ field.name()|var_name }};
     {%- endfor %}
 };
 {%- when FfiDefinition::Function(func) %}

@@ -1,6 +1,74 @@
 constexpr int8_t UNIFFI_RUST_FUTURE_POLL_READY = 0;
 constexpr int8_t UNIFFI_RUST_FUTURE_POLL_WAKE = 1;
 
+class ForeignFutureTaskState {
+public:
+    bool finish() noexcept {
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (finished_) {
+            return false;
+        }
+        finished_ = true;
+        return true;
+    }
+
+    void set_cancel(std::function<void()> cancel) noexcept {
+        std::function<void()> cancel_now;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (cancel_requested_) {
+                cancel_now = std::move(cancel);
+            } else if (!finished_) {
+                cancel_ = std::move(cancel);
+            }
+        }
+        if (cancel_now) {
+            try {
+                cancel_now();
+            } catch (...) {
+            }
+        }
+    }
+
+    void cancel() noexcept {
+        std::function<void()> cancel;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (finished_) {
+                return;
+            }
+            finished_ = true;
+            cancel_requested_ = true;
+            cancel = std::move(cancel_);
+        }
+        if (cancel) {
+            try {
+                cancel();
+            } catch (...) {
+            }
+        }
+    }
+
+private:
+    std::mutex mutex_;
+    bool finished_ = false;
+    bool cancel_requested_ = false;
+    std::function<void()> cancel_;
+};
+
+inline uint64_t foreign_future_handle(const std::shared_ptr<ForeignFutureTaskState> &state) {
+    return reinterpret_cast<uint64_t>(
+        new std::shared_ptr<ForeignFutureTaskState>(state)
+    );
+}
+
+inline void foreign_future_drop(uint64_t handle) noexcept {
+    auto state = std::unique_ptr<std::shared_ptr<ForeignFutureTaskState>>(
+        reinterpret_cast<std::shared_ptr<ForeignFutureTaskState> *>(handle)
+    );
+    (*state)->cancel();
+}
+
 template <typename T, typename Poll, typename Cancel, typename Complete, typename Free, typename Lift, typename ErrorHandler>
 class RustFutureState: public std::enable_shared_from_this<RustFutureState<T, Poll, Cancel, Complete, Free, Lift, ErrorHandler>> {
 public:

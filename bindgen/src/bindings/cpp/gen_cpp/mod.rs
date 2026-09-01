@@ -120,6 +120,19 @@ impl<'a> ScaffoldingHeader<'a> {
             .map(Into::into)
             .chain(self.ci.iter_ffi_function_definitions().map(Into::into))
     }
+
+    pub fn foreign_future_struct_definitions(&self) -> impl Iterator<Item = FfiStruct> + '_ {
+        self.ci
+            .ffi_definitions()
+            .filter_map(|definition| match definition {
+                FfiDefinition::Struct(ffi_struct)
+                    if ffi_struct.name().starts_with("ForeignFuture") =>
+                {
+                    Some(ffi_struct)
+                }
+                _ => None,
+            })
+    }
 }
 
 #[derive(Template)]

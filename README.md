@@ -44,16 +44,14 @@ Regardless of the generation method, these files are produced:
 To integrate the bindings into your projects, simply add the generated bindings files to your project.
 C++17 or newer is required to compile the bindings.
 
-# Unsupported features
-
-The following uniffi features are unsupported.
-
-* Async callback-interface methods (async Rust functions, constructors, and object methods are supported)
-
 Async calls return a move-only `uniffi::Future<T>`. It supports `get()`, `wait()`, `wait_for()`,
 and `cancel()`. Destroying an incomplete future cancels it and releases the Rust future. See
 [the LiveKit integration notes](docs/LIVEKIT_INTEGRATION.md) for the migration shape and current
 tradeoffs.
+
+C++ implementations of async callback interfaces return `uniffi::ForeignFuture<T>`. Its start
+function receives success and failure callbacks and returns a cancellation function, allowing the
+implementation to use its own executor while preserving UniFFI cancellation semantics.
 
 # Configuration options
 

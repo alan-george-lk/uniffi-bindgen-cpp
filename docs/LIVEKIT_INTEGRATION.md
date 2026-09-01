@@ -90,7 +90,8 @@ cancellation protocol can remain unchanged.
 ## Remaining production work
 
 - Replace detached continuation threads with an injectable LiveKit executor.
-- Add async callback-interface generation if Rust needs to await methods implemented by C++.
+- Adapt `uniffi::ForeignFuture<T>` callback implementations to LiveKit's executor and cancellation
+  primitives; the generated adapter does not create worker threads for foreign callbacks.
 - Exercise the generated API against the actual `livekit-uniffi` library on every supported OS and
   architecture.
 - Decide and document ABI/version pinning. The generator and Rust crate must use the same UniFFI
