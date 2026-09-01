@@ -69,10 +69,12 @@ try {
 }
 ```
 
-UniFFI continuations are deferred onto short-lived C++ worker threads to avoid re-entering Rust
-while its future scheduler lock is held. Before production adoption, this should be replaced with a
-configurable dispatcher backed by LiveKit's existing task queue/executor; the ownership and
-cancellation protocol can remain unchanged.
+UniFFI continuations are deferred onto a bounded, single-worker dispatcher by default to avoid
+re-entering Rust while its future scheduler lock is held. LiveKit can register its task queue with
+`uniffi::set_async_dispatcher(dispatch, shutdown)`. The dispatch callback reports whether work was
+accepted; rejection fails and frees the Rust future deterministically. The shutdown callback must
+drain accepted work before returning. Call `uniffi::shutdown_async_dispatcher()` before unloading
+the executor or generated binding code.
 
 ## Recommended migration sequence
 
@@ -89,7 +91,7 @@ cancellation protocol can remain unchanged.
 
 ## Remaining production work
 
-- Replace detached continuation threads with an injectable LiveKit executor.
+- Register and exercise LiveKit's executor through the generated dispatcher hook.
 - Adapt `uniffi::ForeignFuture<T>` callback implementations to LiveKit's executor and cancellation
   primitives; the generated adapter does not create worker threads for foreign callbacks.
 - Exercise the generated API against the actual `livekit-uniffi` library on every supported OS and

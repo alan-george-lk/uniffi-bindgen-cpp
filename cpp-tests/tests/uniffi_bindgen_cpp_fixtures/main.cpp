@@ -4,12 +4,80 @@
 
 #include <chrono>
 #include <atomic>
+#include <condition_variable>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 using namespace std::chrono_literals;
 
 namespace fixtures = uniffi_bindgen_cpp_fixtures;
+
+class TestDispatcher {
+public:
+    TestDispatcher(): worker_([this] { run(); }) {}
+
+    ~TestDispatcher() {
+        shutdown();
+    }
+
+    bool dispatch(uniffi::AsyncTask task) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (!accepting_ || reject_) {
+            return false;
+        }
+        tasks_.push_back(std::move(task));
+        dispatch_count_.fetch_add(1);
+        ready_.notify_one();
+        return true;
+    }
+
+    void reject(bool value) {
+        std::lock_guard<std::mutex> guard(mutex_);
+        reject_ = value;
+    }
+
+    void shutdown() {
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            accepting_ = false;
+        }
+        ready_.notify_all();
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+    }
+
+    int dispatch_count() const {
+        return dispatch_count_.load();
+    }
+
+private:
+    void run() {
+        for (;;) {
+            uniffi::AsyncTask task;
+            {
+                std::unique_lock<std::mutex> lock(mutex_);
+                ready_.wait(lock, [this] { return !accepting_ || !tasks_.empty(); });
+                if (tasks_.empty()) {
+                    return;
+                }
+                task = std::move(tasks_.front());
+                tasks_.pop_front();
+            }
+            task();
+        }
+    }
+
+    mutable std::mutex mutex_;
+    std::condition_variable ready_;
+    std::deque<uniffi::AsyncTask> tasks_;
+    bool accepting_ = true;
+    bool reject_ = false;
+    std::atomic<int> dispatch_count_ = 0;
+    std::thread worker_;
+};
 
 class TestAsyncParser final : public fixtures::AsyncParserForeign {
 public:
@@ -72,6 +140,14 @@ void wait_for_pending_count(uint64_t expected) {
 }
 
 int main() {
+    auto dispatcher = std::make_shared<TestDispatcher>();
+    uniffi::set_async_dispatcher(
+        [dispatcher](uniffi::AsyncTask task) {
+            return dispatcher->dispatch(std::move(task));
+        },
+        [dispatcher] { dispatcher->shutdown(); }
+    );
+
     ASSERT_EQ("async success", uniffi_bindgen_cpp_fixtures::async_fallible(false).get());
     EXPECT_EXCEPTION(
         uniffi_bindgen_cpp_fixtures::async_fallible(true).get(),
@@ -116,6 +192,21 @@ int main() {
     }
     ASSERT_EQ(1, cancellation_count->load());
     ASSERT_EQ(1, destruction_count->load());
+    ASSERT_TRUE(dispatcher->dispatch_count() > 0);
+
+    dispatcher->reject(true);
+    EXPECT_EXCEPTION(
+        fixtures::async_fallible(false).get(),
+        uniffi::AsyncDispatcherError
+    );
+    dispatcher->reject(false);
+    ASSERT_EQ("async success", fixtures::async_fallible(false).get());
+
+    uniffi::shutdown_async_dispatcher();
+    EXPECT_EXCEPTION(
+        fixtures::async_fallible(false).get(),
+        uniffi::AsyncDispatcherError
+    );
 
     return 0;
 }

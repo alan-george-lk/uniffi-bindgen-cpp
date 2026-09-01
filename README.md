@@ -53,6 +53,12 @@ C++ implementations of async callback interfaces return `uniffi::ForeignFuture<T
 function receives success and failure callbacks and returns a cancellation function, allowing the
 implementation to use its own executor while preserving UniFFI cancellation semantics.
 
+Rust-future continuations use one bounded background dispatcher by default. Before making any async
+call, applications can call `uniffi::set_async_dispatcher(dispatch, shutdown)` to use their own
+executor. Before unloading the executor or generated bindings, call
+`uniffi::shutdown_async_dispatcher()`; it rejects new continuations and waits for the registered
+shutdown function to drain accepted work.
+
 # Configuration options
 
 It's possible to [configure some settings](docs/CONFIGURATION.md) by passing `--config`

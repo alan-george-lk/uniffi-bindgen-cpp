@@ -114,12 +114,12 @@ private:
         );
         auto state = *callback_state;
 
-        try {
-            std::thread([state = std::move(state), poll_result]() {
+        if (!::uniffi::detail::dispatch_async(
+            [state, poll_result]() {
                 state->resume(poll_result);
-            }).detach();
-        } catch (...) {
-            state->fail(std::current_exception());
+            }
+        )) {
+            state->dispatch_failed();
         }
     }
 
@@ -183,6 +183,14 @@ private:
             // The promise was already satisfied; cleanup must still happen.
         }
         free_(handle_);
+    }
+
+    void dispatch_failed() noexcept {
+        try {
+            cancel_(handle_);
+        } catch (...) {
+        }
+        fail(std::make_exception_ptr(::uniffi::AsyncDispatcherError()));
     }
 
     uint64_t handle_;
