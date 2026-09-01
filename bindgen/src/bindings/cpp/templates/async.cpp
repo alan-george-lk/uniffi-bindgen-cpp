@@ -79,7 +79,8 @@ public:
         Complete complete,
         Free free,
         Lift lift,
-        ErrorHandler error_handler
+        ErrorHandler error_handler,
+        std::shared_ptr<::uniffi::detail::FutureCompletionState<T>> completion_state
     ):
         handle_(handle),
         poll_(std::move(poll)),
@@ -87,11 +88,8 @@ public:
         complete_(std::move(complete)),
         free_(std::move(free)),
         lift_(std::move(lift)),
-        error_handler_(std::move(error_handler)) {}
-
-    std::future<T> get_future() {
-        return promise_.get_future();
-    }
+        error_handler_(std::move(error_handler)),
+        completion_state_(std::move(completion_state)) {}
 
     void poll() {
         using State = RustFutureState<T, Poll, Cancel, Complete, Free, Lift, ErrorHandler>;
@@ -149,26 +147,26 @@ private:
             if constexpr (std::is_void_v<T>) {
                 complete_(handle_, &status);
                 if (cancelled_.load()) {
-                    promise_.set_exception(std::make_exception_ptr(::uniffi::AsyncCancelledError()));
+                    completion_state_->complete(::uniffi::FutureResult<void>(
+                        std::make_exception_ptr(::uniffi::AsyncCancelledError())
+                    ));
                 } else {
                     check_rust_call(status, error_handler_);
-                    promise_.set_value();
+                    completion_state_->complete(::uniffi::FutureResult<void>());
                 }
             } else {
                 auto value = complete_(handle_, &status);
                 if (cancelled_.load()) {
-                    promise_.set_exception(std::make_exception_ptr(::uniffi::AsyncCancelledError()));
+                    completion_state_->complete(::uniffi::FutureResult<T>(
+                        std::make_exception_ptr(::uniffi::AsyncCancelledError())
+                    ));
                 } else {
                     check_rust_call(status, error_handler_);
-                    promise_.set_value(lift_(value));
+                    completion_state_->complete(::uniffi::FutureResult<T>(lift_(value)));
                 }
             }
         } catch (...) {
-            try {
-                promise_.set_exception(std::current_exception());
-            } catch (...) {
-                // The promise was already satisfied; cleanup must still happen.
-            }
+            completion_state_->complete(::uniffi::FutureResult<T>(std::current_exception()));
         }
         free_(handle_);
     }
@@ -177,11 +175,7 @@ private:
         if (finished_.exchange(true)) {
             return;
         }
-        try {
-            promise_.set_exception(std::move(error));
-        } catch (...) {
-            // The promise was already satisfied; cleanup must still happen.
-        }
+        completion_state_->complete(::uniffi::FutureResult<T>(std::move(error)));
         free_(handle_);
     }
 
@@ -200,7 +194,7 @@ private:
     Free free_;
     Lift lift_;
     ErrorHandler error_handler_;
-    std::promise<T> promise_;
+    std::shared_ptr<::uniffi::detail::FutureCompletionState<T>> completion_state_;
     std::atomic<bool> cancelled_ = false;
     std::atomic<bool> finished_ = false;
 };
@@ -219,8 +213,10 @@ Future<T> rust_call_async(
     const auto handle = rust_future();
     using State = RustFutureState<T, Poll, Cancel, Complete, Free, Lift, ErrorHandler>;
 
-    auto state = std::make_shared<State>(handle, poll, cancel, complete, free, lift, error_handler);
-    auto future = state->get_future();
+    auto completion_state = std::make_shared<::uniffi::detail::FutureCompletionState<T>>();
+    auto state = std::make_shared<State>(
+        handle, poll, cancel, complete, free, lift, error_handler, completion_state
+    );
     try {
         state->poll();
     } catch (...) {
@@ -228,7 +224,7 @@ Future<T> rust_call_async(
         throw;
     }
 
-    return Future<T>(std::move(future), [weak_state = std::weak_ptr<State>(state)]() {
+    return Future<T>(std::move(completion_state), [weak_state = std::weak_ptr<State>(state)]() {
         if (auto state = weak_state.lock()) {
             state->cancel();
         }

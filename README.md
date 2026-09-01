@@ -49,6 +49,11 @@ and `cancel()`. Destroying an incomplete future cancels it and releases the Rust
 [the LiveKit integration notes](docs/LIVEKIT_INTEGRATION.md) for the migration shape and current
 tradeoffs.
 
+To adapt without a blocking waiter thread, consume the future with
+`std::move(future).then(executor, callback)`. The callback receives `uniffi::FutureResult<T>` and
+the returned `uniffi::FutureContinuation` owns cancellation until completion. Destroying that
+token early cancels the Rust operation.
+
 C++ implementations of async callback interfaces return `uniffi::ForeignFuture<T>`. Its start
 function receives success and failure callbacks and returns a cancellation function, allowing the
 implementation to use its own executor while preserving UniFFI cancellation semantics.

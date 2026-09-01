@@ -221,23 +221,230 @@ private:
 };
 
 template <typename T>
+class FutureResult {
+public:
+    explicit FutureResult(T value): value_(std::move(value)) {}
+    explicit FutureResult(std::exception_ptr error): error_(std::move(error)) {}
+
+    bool has_value() const noexcept { return !error_; }
+    std::exception_ptr error() const noexcept { return error_; }
+
+    T get() && {
+        if (error_) {
+            std::rethrow_exception(error_);
+        }
+        return std::move(*value_);
+    }
+
+private:
+    std::optional<T> value_;
+    std::exception_ptr error_;
+};
+
+template <>
+class FutureResult<void> {
+public:
+    FutureResult() = default;
+    explicit FutureResult(std::exception_ptr error): error_(std::move(error)) {}
+
+    bool has_value() const noexcept { return !error_; }
+    std::exception_ptr error() const noexcept { return error_; }
+
+    void get() const {
+        if (error_) {
+            std::rethrow_exception(error_);
+        }
+    }
+
+private:
+    std::exception_ptr error_;
+};
+
+namespace detail {
+
+template <typename T>
+class FutureCompletionState {
+public:
+    using Result = FutureResult<T>;
+    using Callback = std::function<void(Result)>;
+
+    void complete(Result result) noexcept {
+        Callback callback;
+        AsyncDispatcher executor;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (result_) {
+                return;
+            }
+            result_.emplace(std::move(result));
+            callback = std::move(callback_);
+            executor = std::move(executor_);
+        }
+        ready_.notify_all();
+        if (callback) {
+            dispatch_continuation(std::move(executor), std::move(callback));
+        }
+    }
+
+    T get() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        claim_locked();
+        ready_.wait(lock, [this] { return result_.has_value(); });
+        auto result = std::move(*result_);
+        lock.unlock();
+        return std::move(result).get();
+    }
+
+    void wait() const {
+        std::unique_lock<std::mutex> lock(mutex_);
+        ready_.wait(lock, [this] { return result_.has_value(); });
+    }
+
+    template <typename Rep, typename Period>
+    std::future_status wait_for(const std::chrono::duration<Rep, Period> &timeout) const {
+        std::unique_lock<std::mutex> lock(mutex_);
+        return ready_.wait_for(lock, timeout, [this] { return result_.has_value(); })
+            ? std::future_status::ready
+            : std::future_status::timeout;
+    }
+
+    void then(AsyncDispatcher executor, Callback callback) {
+        bool dispatch_now = false;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            claim_locked();
+            executor_ = std::move(executor);
+            callback_ = std::move(callback);
+            dispatch_now = result_.has_value();
+        }
+        if (dispatch_now) {
+            Callback ready_callback;
+            AsyncDispatcher ready_executor;
+            {
+                std::lock_guard<std::mutex> guard(mutex_);
+                ready_callback = std::move(callback_);
+                ready_executor = std::move(executor_);
+            }
+            dispatch_continuation(std::move(ready_executor), std::move(ready_callback));
+        }
+    }
+
+private:
+    void claim_locked() {
+        if (claimed_) {
+            throw std::logic_error("UniFFI future result has already been consumed");
+        }
+        claimed_ = true;
+    }
+
+    void dispatch_continuation(AsyncDispatcher executor, Callback callback) noexcept {
+        Result result = [&] {
+            std::lock_guard<std::mutex> guard(mutex_);
+            return std::move(*result_);
+        }();
+        auto invoked = std::make_shared<std::atomic<bool>>(false);
+        auto shared_callback = std::make_shared<Callback>(std::move(callback));
+        auto shared_result = std::make_shared<std::optional<Result>>(std::move(result));
+        auto task = [invoked, shared_callback, shared_result]() mutable {
+            if (invoked->exchange(true)) {
+                return;
+            }
+            try {
+                (*shared_callback)(std::move(**shared_result));
+            } catch (...) {
+            }
+            shared_result->reset();
+        };
+        auto reject = [invoked, shared_callback]() {
+            if (invoked->exchange(true)) {
+                return;
+            }
+            try {
+                (*shared_callback)(Result(std::make_exception_ptr(AsyncDispatcherError())));
+            } catch (...) {
+            }
+        };
+        try {
+            if (!executor(task)) {
+                reject();
+            }
+        } catch (...) {
+            reject();
+        }
+    }
+
+    mutable std::mutex mutex_;
+    mutable std::condition_variable ready_;
+    std::optional<Result> result_;
+    bool claimed_ = false;
+    AsyncDispatcher executor_;
+    Callback callback_;
+};
+
+template <>
+inline void FutureCompletionState<void>::get() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    claim_locked();
+    ready_.wait(lock, [this] { return result_.has_value(); });
+    auto result = std::move(*result_);
+    lock.unlock();
+    result.get();
+}
+
+} // namespace detail
+
+class FutureContinuation {
+public:
+    explicit FutureContinuation(std::function<void()> cancel): cancel_(std::move(cancel)) {}
+    FutureContinuation(const FutureContinuation &) = delete;
+    FutureContinuation &operator=(const FutureContinuation &) = delete;
+    FutureContinuation(FutureContinuation &&other) noexcept:
+        cancel_(std::move(other.cancel_)) {
+        other.cancel_ = nullptr;
+    }
+    FutureContinuation &operator=(FutureContinuation &&other) noexcept {
+        if (this != &other) {
+            cancel();
+            cancel_ = std::move(other.cancel_);
+            other.cancel_ = nullptr;
+        }
+        return *this;
+    }
+
+    ~FutureContinuation() { cancel(); }
+
+    void cancel() noexcept {
+        if (cancel_) {
+            auto cancel = std::move(cancel_);
+            cancel();
+        }
+    }
+
+private:
+    std::function<void()> cancel_;
+};
+
+template <typename T>
 class Future {
 public:
-    Future(std::future<T> future, std::function<void()> cancel):
-        future_(std::move(future)), cancel_(std::move(cancel)) {}
+    using Result = FutureResult<T>;
+    using Callback = std::function<void(Result)>;
+
+    Future(std::shared_ptr<detail::FutureCompletionState<T>> state, std::function<void()> cancel):
+        state_(std::move(state)), cancel_(std::move(cancel)) {}
 
     Future(const Future &) = delete;
     Future &operator=(const Future &) = delete;
 
     Future(Future &&other) noexcept:
-        future_(std::move(other.future_)), cancel_(std::move(other.cancel_)) {
+        state_(std::move(other.state_)), cancel_(std::move(other.cancel_)) {
         other.cancel_ = nullptr;
     }
 
     Future &operator=(Future &&other) noexcept {
         if (this != &other) {
             cancel();
-            future_ = std::move(other.future_);
+            state_ = std::move(other.state_);
             cancel_ = std::move(other.cancel_);
             other.cancel_ = nullptr;
         }
@@ -249,20 +456,37 @@ public:
     }
 
     bool valid() const noexcept {
-        return future_.valid();
+        return state_ != nullptr;
     }
 
     decltype(auto) get() {
-        return future_.get();
+        require_state();
+        auto state = std::move(state_);
+        cancel_ = nullptr;
+        return state->get();
     }
 
     void wait() const {
-        future_.wait();
+        require_state();
+        state_->wait();
     }
 
     template <typename Rep, typename Period>
     std::future_status wait_for(const std::chrono::duration<Rep, Period> &timeout) const {
-        return future_.wait_for(timeout);
+        require_state();
+        return state_->wait_for(timeout);
+    }
+
+    FutureContinuation then(AsyncDispatcher executor, Callback callback) && {
+        require_state();
+        if (!executor || !callback) {
+            throw std::invalid_argument("UniFFI future continuation must not be empty");
+        }
+        state_->then(std::move(executor), std::move(callback));
+        auto cancel = std::move(cancel_);
+        cancel_ = nullptr;
+        state_.reset();
+        return FutureContinuation(std::move(cancel));
     }
 
     void cancel() noexcept {
@@ -274,6 +498,12 @@ public:
     }
 
 private:
-    std::future<T> future_;
+    void require_state() const {
+        if (!state_) {
+            throw std::future_error(std::future_errc::no_state);
+        }
+    }
+
+    std::shared_ptr<detail::FutureCompletionState<T>> state_;
     std::function<void()> cancel_;
 };

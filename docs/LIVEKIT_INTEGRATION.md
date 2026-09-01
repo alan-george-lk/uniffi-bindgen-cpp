@@ -69,6 +69,19 @@ try {
 }
 ```
 
+For an SDK adapter, consume the future into a continuation instead of blocking a waiter thread:
+
+```cpp
+auto continuation = std::move(connect).then(
+    livekit_executor,
+    [](uniffi::FutureResult<Connection> result) {
+        // std::move(result).get() returns Connection or rethrows the typed error.
+    });
+```
+
+The move-only `FutureContinuation` retains cancellation ownership. Its explicit `cancel()` and its
+destructor cancel an incomplete Rust future. The adapter should retain it until the callback runs.
+
 UniFFI continuations are deferred onto a bounded, single-worker dispatcher by default to avoid
 re-entering Rust while its future scheduler lock is held. LiveKit can register its task queue with
 `uniffi::set_async_dispatcher(dispatch, shutdown)`. The dispatch callback reports whether work was
