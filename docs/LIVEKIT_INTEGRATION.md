@@ -29,7 +29,7 @@ cargo run -p uniffi-bindgen-cpp -- \
 ```
 
 Compile each generated `<namespace>.cpp`, include `<namespace>.hpp`, link the Rust library, and use
-C++20 or newer.
+C++17 or newer.
 
 ## Async C++ shape
 

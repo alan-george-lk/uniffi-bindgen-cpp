@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <exception>

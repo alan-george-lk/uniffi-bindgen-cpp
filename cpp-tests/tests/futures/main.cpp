@@ -47,10 +47,10 @@ int main() {
     ASSERT_EQ("value", record.a);
     ASSERT_EQ(42, record.b);
 
-    auto holding = futures::use_shared_resource({ .release_after_ms = 50, .timeout_ms = 100 });
+    auto holding = futures::use_shared_resource({50, 100});
     std::this_thread::sleep_for(5ms);
     EXPECT_EXCEPTION(
-        futures::use_shared_resource({ .release_after_ms = 0, .timeout_ms = 5 }).get(),
+        futures::use_shared_resource({0, 5}).get(),
         futures::async_error::Timeout
     );
     holding.get();
