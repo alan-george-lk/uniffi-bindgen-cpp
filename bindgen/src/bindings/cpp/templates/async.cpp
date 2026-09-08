@@ -143,7 +143,7 @@ private:
         }
 
         try {
-            RustCallStatus status = { 0 };
+            RustCallStatus status{};
             if constexpr (std::is_void_v<T>) {
                 complete_(handle_, &status);
                 if (cancelled_.load()) {

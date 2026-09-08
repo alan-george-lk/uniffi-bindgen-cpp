@@ -5,7 +5,7 @@
 
     rustbuffer_free(buf);
 
-    return std::move(ret);
+    return ret;
 }
 
 RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
@@ -14,7 +14,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -53,7 +53,7 @@ uint64_t {{ ffi_converter_name }}::allocation_size(const {{ type_name|class_name
 
     rustbuffer_free(buf);
 
-    return std::move(ret);
+    return ret;
 }
 
 RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
@@ -62,7 +62,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -109,6 +109,7 @@ uint64_t {{ ffi_converter_name }}::allocation_size(const {{ type_name|class_name
     uint64_t size = sizeof(int32_t);
 
     size += std::visit([&](auto &&arg) {
+        (void)arg;
         using T = std::decay_t<decltype(arg)>;
         {%- for variant in e.variants() %}
         {% if !loop.first %}else {% endif %}if constexpr (std::is_same_v<T, {{ type_name }}::{{ variant|variant_name(config.enum_style) }}>) {
