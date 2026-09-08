@@ -3,7 +3,6 @@ pub(crate) mod gen_cpp;
 use std::{fmt::Debug, fs};
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use uniffi_bindgen::{
     interface::Literal, BindingGenerator, Component, ComponentInterface, GenerationSettings,
 };
@@ -12,26 +11,6 @@ use self::gen_cpp::{generate_cpp_bindings, Bindings};
 
 pub(crate) struct CppBindingGenerator {
     pub scaffolding_mode: bool,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigRoot {
-    #[serde(default)]
-    bindings: ConfigBindings,
-    #[serde(default)]
-    scaffolding: ConfigScaffolding,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigBindings {
-    #[serde(default)]
-    cpp: gen_cpp::Config,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigScaffolding {
-    #[serde(default)]
-    cpp: gen_cpp::ScaffoldingConfig,
 }
 
 /// A Trait to help render types in a language specific format.

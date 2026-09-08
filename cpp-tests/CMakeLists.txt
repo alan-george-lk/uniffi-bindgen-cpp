@@ -82,6 +82,21 @@ test_case(type_flattening)
 test_case(uniffi_bindgen_cpp_fixtures)
 test_case(futures)
 
+add_executable(async-dispatcher-test
+    tests/async_dispatcher/main.cpp
+    ${BINDINGS_SRC_DIR}/futures.cpp)
+target_include_directories(async-dispatcher-test PRIVATE ${BINDINGS_SRC_DIR} include)
+target_link_directories(async-dispatcher-test PRIVATE ${BINDINGS_BUILD_DIR})
+target_link_libraries(async-dispatcher-test
+    uniffi_bindgen_cpp_fixtures Threads::Threads ${ADDITIONAL_LIBS})
+add_dependencies(async-dispatcher-test bindings)
+
+foreach(SCENARIO IN ITEMS inline rejection lifetime)
+    add_test(NAME async-dispatcher-${SCENARIO}-test
+        COMMAND async-dispatcher-test ${SCENARIO})
+    set_tests_properties(async-dispatcher-${SCENARIO}-test PROPERTIES TIMEOUT 15)
+endforeach()
+
 add_executable(ext_types_import-test
     tests/ext_types_import/main.cpp
     ${BINDINGS_SRC_DIR}/ext_types_export.cpp

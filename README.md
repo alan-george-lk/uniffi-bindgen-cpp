@@ -55,8 +55,9 @@ the returned `uniffi::FutureContinuation` owns cancellation until completion. De
 token early cancels the Rust operation.
 
 C++ implementations of async callback interfaces return `uniffi::ForeignFuture<T>`. Its start
-function receives success and failure callbacks and returns a cancellation function, allowing the
-implementation to use its own executor while preserving UniFFI cancellation semantics.
+function receives success and failure callbacks and returns a cancellation function. The generated
+bridge accepts the first completion and ignores duplicates, allowing the implementation to use its
+own executor while preserving UniFFI typed-error and cancellation semantics.
 
 Rust-future continuations use one bounded background dispatcher by default. Before making any async
 call, applications can call `uniffi::set_async_dispatcher(dispatch, shutdown)` to use their own

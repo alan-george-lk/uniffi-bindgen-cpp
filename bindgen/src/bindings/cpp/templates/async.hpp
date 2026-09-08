@@ -102,13 +102,17 @@ inline AsyncDispatcherState &async_dispatcher_state() {
 
 inline bool dispatch_async(AsyncTask task) noexcept {
     auto &state = async_dispatcher_state();
-    std::lock_guard<std::mutex> guard(state.mutex);
-    if (!state.accepting) {
-        return false;
+    AsyncDispatcher dispatch;
+    {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        if (!state.accepting) {
+            return false;
+        }
+        state.started = true;
+        dispatch = state.dispatch;
     }
-    state.started = true;
     try {
-        return state.dispatch(std::move(task));
+        return dispatch(std::move(task));
     } catch (...) {
         return false;
     }
@@ -145,6 +149,7 @@ inline void set_async_dispatcher(
 // Permanently stops continuation dispatch for this process. Call this before unloading
 // code used by a custom dispatcher or generated bindings.
 inline void shutdown_async_dispatcher() noexcept {
+    AsyncDispatcher dispatch;
     AsyncDispatcherShutdown shutdown;
     {
         auto &state = detail::async_dispatcher_state();
@@ -153,7 +158,10 @@ inline void shutdown_async_dispatcher() noexcept {
             return;
         }
         state.accepting = false;
+        dispatch = std::move(state.dispatch);
         shutdown = std::move(state.shutdown);
+        state.dispatch = {};
+        state.shutdown = {};
     }
     if (shutdown) {
         try {
@@ -161,11 +169,14 @@ inline void shutdown_async_dispatcher() noexcept {
         } catch (...) {
         }
     }
+    shutdown = {};
+    dispatch = {};
 }
 
 // A C++17-compatible asynchronous operation returned by foreign implementations of
-// UniFFI async callback interfaces.  Implementations arrange their own scheduling and
-// invoke exactly one completion callback.  The returned function cancels the operation.
+// UniFFI async callback interfaces. Implementations arrange their own scheduling. The
+// generated bridge accepts the first success or failure callback and ignores later
+// completions. The returned function requests cancellation of an incomplete operation.
 template <typename T>
 class ForeignFuture {
 public:

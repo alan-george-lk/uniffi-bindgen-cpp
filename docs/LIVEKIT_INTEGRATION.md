@@ -13,8 +13,9 @@ proc-macro library metadata.
 - Typed UniFFI errors and Rust panic propagation through `Future::get()`.
 - UniFFI 0.31 trait-interface handle tagging, clone/free lifecycle, and Rust/foreign round trips.
 
-Async trait/callback-interface methods are still rejected during generation. Synchronous callback
-interfaces are supported.
+Async trait/callback-interface methods are represented by `uniffi::ForeignFuture<T>`. The foreign
+implementation supplies completion callbacks and a cancellation function; the generated bridge
+accepts one completion and preserves typed errors and cancellation across the FFI boundary.
 
 ## Build and generate
 
@@ -105,8 +106,8 @@ the executor or generated binding code.
 ## Remaining production work
 
 - Register and exercise LiveKit's executor through the generated dispatcher hook.
-- Adapt `uniffi::ForeignFuture<T>` callback implementations to LiveKit's executor and cancellation
-  primitives; the generated adapter does not create worker threads for foreign callbacks.
+- Adapt LiveKit's `uniffi::ForeignFuture<T>` callback implementations to the SDK executor and
+  cancellation primitives; foreign implementations retain responsibility for their scheduling.
 - Exercise the generated API against the actual `livekit-uniffi` library on every supported OS and
   architecture.
 - Decide and document ABI/version pinning. The generator and Rust crate must use the same UniFFI
