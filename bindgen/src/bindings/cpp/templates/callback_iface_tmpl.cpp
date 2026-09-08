@@ -115,6 +115,7 @@
         uniffi_out_return = {{ t|lower_fn }}(v);
     };
     {% when None %}
+    (void)uniffi_out_return;
     auto write_value = [](){};
     {% endmatch %}
 
