@@ -118,11 +118,20 @@ impl<'a> ScaffoldingHeader<'a> {
                     .flat_map(|o| o.vtable_definition()),
             )
             .map(Into::into)
-            .chain(
-                self.ci
-                    .iter_ffi_function_definitions_non_async()
-                    .map(Into::into),
-            )
+            .chain(self.ci.iter_ffi_function_definitions().map(Into::into))
+    }
+
+    pub fn foreign_future_struct_definitions(&self) -> impl Iterator<Item = FfiStruct> + '_ {
+        self.ci
+            .ffi_definitions()
+            .filter_map(|definition| match definition {
+                FfiDefinition::Struct(ffi_struct)
+                    if ffi_struct.name().starts_with("ForeignFuture") =>
+                {
+                    Some(ffi_struct)
+                }
+                _ => None,
+            })
     }
 }
 
@@ -193,9 +202,18 @@ impl<'a> CppWrapperHeader<'a> {
             .collect::<TopologicalSort<_>>();
 
         let mut sorted: Vec<Type> = Vec::new();
+        let mut emitted_names = BTreeSet::new();
         while !definition_topology.peek_all().is_empty() {
-            let list = definition_topology.pop_all();
+            let mut list = definition_topology.pop_all();
+            list.sort();
             for name in list {
+                // TopologicalSort preserves duplicate dependency links.  A record or
+                // rich enum can mention the same named type more than once, causing
+                // that type to be returned once per link.  Definitions, however,
+                // must be emitted exactly once.
+                if !emitted_names.insert(name) {
+                    continue;
+                }
                 match self.ci.get_type(name) {
                     // External types are defined in their own namespace's header with their own
                     // converters declared, which we `#include`. They must not enter the local
@@ -214,7 +232,7 @@ impl<'a> CppWrapperHeader<'a> {
         }
 
         let rest = types
-            .filter(|&t| !sorted.contains(t))
+            .filter(|t| type_name(t).map_or(true, |name| !emitted_names.contains(name)))
             .cloned()
             .collect::<BTreeSet<_>>();
 

@@ -1,7 +1,7 @@
 use askama;
 use heck::{ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
 use uniffi_bindgen::{
-    interface::{Argument, AsType, FfiType, Literal, Object, Type, Variant},
+    interface::{Argument, AsType, DefaultValue, FfiType, Literal, Object, Type, Variant},
     ComponentInterface,
 };
 
@@ -158,7 +158,12 @@ impl CppCodeOracle {
         let class_name = self.class_name(obj.name());
         if obj.has_callback_interface() {
             let impl_name = format!("{class_name}Impl");
-            (class_name, impl_name)
+            let interface_name = if obj.has_async_method() {
+                format!("{class_name}Foreign")
+            } else {
+                class_name
+            };
+            (interface_name, impl_name)
         } else {
             (format!("I{class_name}"), class_name)
         }
@@ -273,11 +278,19 @@ pub(crate) fn object_names(obj: &Object) -> Result<(String, String)> {
 }
 
 pub(crate) fn literal_cpp(
-    literal: &Literal,
+    default: &DefaultValue,
     as_ct: &impl AsCodeType,
     enum_style: &EnumStyle,
     ci: &ComponentInterface,
 ) -> Result<String> {
+    let literal = match default {
+        DefaultValue::Default => return Ok("{}".into()),
+        DefaultValue::Literal(Literal::Some { inner }) => {
+            return literal_cpp(inner, as_ct, enum_style, ci)
+        }
+        DefaultValue::Literal(literal) => literal,
+    };
+
     match literal {
         Literal::Enum(name, _) => Ok(format!(
             "{}::{}",
@@ -339,15 +352,24 @@ pub(crate) fn ffi_type_name(ffi_type: &FfiType) -> Result<String> {
         FfiType::Int64 => "int64_t".into(),
         FfiType::Float32 => "float".into(),
         FfiType::Float64 => "double".into(),
-        FfiType::RustArcPtr(_) | FfiType::VoidPointer => "void *".into(),
+        FfiType::VoidPointer => "void *".into(),
         FfiType::RustBuffer(_) => "RustBuffer".into(),
         FfiType::ForeignBytes => "ForeignBytes".into(),
+        FfiType::Callback(name) if name == "RustFutureContinuationCallback" => name.clone(),
         FfiType::Callback(_) => "void *".into(),
         FfiType::Struct(name) => ffi_struct_name(name)?,
         FfiType::RustCallStatus => "RustCallStatus*".into(),
         FfiType::Reference(typ) => format!("const {} &", ffi_type_name(typ)?),
         FfiType::MutReference(typ) => format!("{} &", ffi_type_name(typ)?),
     })
+}
+
+pub(crate) fn ffi_field_type_name(ffi_type: &FfiType) -> Result<String> {
+    if matches!(ffi_type, FfiType::RustCallStatus) {
+        Ok("RustCallStatus".into())
+    } else {
+        ffi_type_name(ffi_type)
+    }
 }
 
 pub(crate) fn class_name(nm: &str) -> Result<String> {

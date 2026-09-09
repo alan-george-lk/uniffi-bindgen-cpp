@@ -11,8 +11,8 @@ template <class> inline constexpr bool always_false_v = false;
 
 namespace {
 void ensure_initialized() {
-    auto bindings_contract_version = {{ ci.uniffi_contract_version() }};
-    auto scaffolding_contract_version = {{ ci.ffi_uniffi_contract_version().name() }}();
+    const uint32_t bindings_contract_version = {{ ci.uniffi_contract_version() }};
+    const uint32_t scaffolding_contract_version = {{ ci.ffi_uniffi_contract_version().name() }}();
 
     if (bindings_contract_version != scaffolding_contract_version) {
         throw std::runtime_error("UniFFI contract version mismatch: try cleaning and rebuilding your project");
@@ -31,7 +31,7 @@ void ensure_initialized() {
 
 // Note: we need this indirection here and can't inline this code in the rust_call function
 // as it's a templated function
-void initialize() {
+[[maybe_unused]] void initialize() {
     static std::once_flag init_flag;
     std::call_once(init_flag, ensure_initialized);
 }
@@ -64,7 +64,7 @@ template <typename F, typename EF, typename... Args, typename R = std::invoke_re
 R rust_call(F f, EF error_cb, Args... args) {
     initialize();
 
-    RustCallStatus status = { 0 };
+    RustCallStatus status{};
 
     if constexpr (std::is_void_v<R>) {
         f(args..., &status);
@@ -76,6 +76,8 @@ R rust_call(F f, EF error_cb, Args... args) {
         return ret;
     }
 }
+
+{% include "async.cpp" %}
 
 template <typename F, typename W>
 void rust_call_trait_interface(RustCallStatus* status, F make_call, W write_value) {

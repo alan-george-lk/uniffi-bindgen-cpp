@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
 project(binding-tests VERSION 1.0.0 LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+if (MSVC)
+    add_compile_options(/permissive-)
+else()
+    add_compile_options(-pedantic-errors)
+endif()
 
 include(CTest)
 enable_testing()
@@ -73,6 +79,23 @@ test_case(empty_type)
 test_case(error_types_builtin)
 test_case(reserved_field_name)
 test_case(type_flattening)
+test_case(uniffi_bindgen_cpp_fixtures)
+test_case(futures)
+
+add_executable(async-dispatcher-test
+    tests/async_dispatcher/main.cpp
+    ${BINDINGS_SRC_DIR}/futures.cpp)
+target_include_directories(async-dispatcher-test PRIVATE ${BINDINGS_SRC_DIR} include)
+target_link_directories(async-dispatcher-test PRIVATE ${BINDINGS_BUILD_DIR})
+target_link_libraries(async-dispatcher-test
+    uniffi_bindgen_cpp_fixtures Threads::Threads ${ADDITIONAL_LIBS})
+add_dependencies(async-dispatcher-test bindings)
+
+foreach(SCENARIO IN ITEMS inline rejection lifetime)
+    add_test(NAME async-dispatcher-${SCENARIO}-test
+        COMMAND async-dispatcher-test ${SCENARIO})
+    set_tests_properties(async-dispatcher-${SCENARIO}-test PROPERTIES TIMEOUT 15)
+endforeach()
 
 add_executable(ext_types_import-test
     tests/ext_types_import/main.cpp

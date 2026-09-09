@@ -1,5 +1,6 @@
 {%- let obj = ci.get_object_definition(name).unwrap() %}
 {%- let (interface_name, impl_class_name) = obj|object_names %}
+{%- let foreign_interface_name = interface_name %}
 {%- let class_name = type_name|class_name %}
 {%- let ffi_converter_name = typ|ffi_converter_name %}
 {%- let canonical_type_name = typ|canonical_name %}
@@ -14,9 +15,9 @@ namespace uniffi {
 {%- endif %}
 
 
-{{ impl_class_name }}::{{ impl_class_name }}(void *ptr): instance(ptr) {}
+{{ impl_class_name }}::{{ impl_class_name }}(uint64_t handle): instance(handle) {}
 
-{{ impl_class_name }}::{{ impl_class_name }}(const {{ impl_class_name }} &other) : instance(nullptr) {
+{{ impl_class_name }}::{{ impl_class_name }}(const {{ impl_class_name }} &other) : instance(0) {
     if (other.instance) {
         instance = other._uniffi_internal_clone_pointer();
     }
@@ -30,29 +31,45 @@ namespace uniffi {
 
 {% match obj.primary_constructor() -%}
 {%- when Some with (ctor) %}
-{{ type_name }} {{ impl_class_name }}::init({% call macros::param_list(ctor) %}) {
+{% if ctor.is_async() %}uniffi::Future<{% endif %}{{ type_name }}{% if ctor.is_async() %}>{% endif %} {{ impl_class_name }}::init({% call macros::param_list(ctor) %}) {
+    {%- if ctor.is_async() %}
+    return {% call macros::rust_call_async(ctor, type_name) %};
+    {%- else %}
     return {{ type_name }}(
         new {{ impl_class_name }}({%- call macros::rust_call(ctor) -%})
     );
+    {%- endif %}
 }
 {% else -%}
 {% endmatch -%}
 
 {% for ctor in obj.alternate_constructors() %}
-{{ type_name }} {{ impl_class_name }}::{{ ctor.name() }}({% call macros::param_list(ctor) %}) {
+{% if ctor.is_async() %}uniffi::Future<{% endif %}{{ type_name }}{% if ctor.is_async() %}>{% endif %} {{ impl_class_name }}::{{ ctor.name() }}({% call macros::param_list(ctor) %}) {
+    {%- if ctor.is_async() %}
+    return {% call macros::rust_call_async(ctor, type_name) %};
+    {%- else %}
     return {{ type_name }}(new {{ impl_class_name }}({% call macros::rust_call(ctor) %}));
+    {%- endif %}
 }
 {% endfor %}
 
 {%- for method in obj.methods() %}
-{% match method.return_type() %}{% when Some with (return_type) %}{{ return_type|type_name(ci) }} {% else %}void {% endmatch -%}
+{% if method.is_async() %}uniffi::Future<{% endif %}{% match method.return_type() %}{% when Some with (return_type) %}{{ return_type|type_name(ci) }}{% else %}void{% endmatch %}{% if method.is_async() %}>{% endif %}
 {{ impl_class_name }}::{{ method.name()|fn_name }}({% call macros::param_list(method) %}) {
     auto ptr = this->_uniffi_internal_clone_pointer();
     {%- match method.return_type() %}
     {% when Some with (return_type) %}
+    {%- if method.is_async() %}
+    return {% call macros::rust_call_async_with_prefix("ptr", method, return_type|type_name(ci)) %};
+    {%- else %}
     return uniffi::{{ return_type|lift_fn }}({% call macros::rust_call_with_prefix("ptr", method) %});
+    {%- endif %}
+    {%- else %}
+    {%- if method.is_async() %}
+    return {% call macros::rust_call_async_void_with_prefix("ptr", method) %};
     {%- else %}
     {% call macros::rust_call_with_prefix("ptr", method) -%};
+    {%- endif %}
     {%- endmatch %}
 }
 {%- endfor %}
@@ -65,7 +82,7 @@ namespace uniffi {
     );
 }
 
-void *{{ impl_class_name }}::_uniffi_internal_clone_pointer() const {
+uint64_t {{ impl_class_name }}::_uniffi_internal_clone_pointer() const {
     return uniffi::rust_call(
         {{ obj.ffi_object_clone().name() }},
         nullptr,
@@ -93,6 +110,10 @@ bool {{ impl_class_name }}::ne(const {{ type_name }} &other) const {
 {% when UniffiTrait::Hash { hash } %}
 uint64_t {{ impl_class_name }}::hash() const {
     return uniffi::{{ Type::UInt64.borrow()|lift_fn }}({% call macros::rust_call_with_prefix("this->_uniffi_internal_clone_pointer()", hash) %});
+}
+{% when UniffiTrait::Ord { cmp } %}
+int8_t {{ impl_class_name }}::cmp(const {{ type_name }} &other) const {
+    return uniffi::{{ Type::Int8.borrow()|lift_fn }}({% call macros::rust_call_with_prefix("this->_uniffi_internal_clone_pointer()", cmp) %});
 }
 {% endmatch %}
 {%- endfor %}

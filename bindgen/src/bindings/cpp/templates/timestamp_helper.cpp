@@ -13,7 +13,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {

@@ -3,35 +3,14 @@ pub(crate) mod gen_cpp;
 use std::{fmt::Debug, fs};
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use uniffi_bindgen::{
-    backend::Literal, BindingGenerator, Component, ComponentInterface, GenerationSettings,
+    interface::Literal, BindingGenerator, Component, ComponentInterface, GenerationSettings,
 };
 
 use self::gen_cpp::{generate_cpp_bindings, Bindings};
 
 pub(crate) struct CppBindingGenerator {
     pub scaffolding_mode: bool,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigRoot {
-    #[serde(default)]
-    bindings: ConfigBindings,
-    #[serde(default)]
-    scaffolding: ConfigScaffolding,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigBindings {
-    #[serde(default)]
-    cpp: gen_cpp::Config,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct ConfigScaffolding {
-    #[serde(default)]
-    cpp: gen_cpp::ScaffoldingConfig,
 }
 
 /// A Trait to help render types in a language specific format.
@@ -93,13 +72,6 @@ impl BindingGenerator for CppBindingGenerator {
         components: &[uniffi_bindgen::Component<Self::Config>],
     ) -> Result<()> {
         for Component { ci, config, .. } in components {
-            if ci.has_async_fns() || ci.has_async_callback_interface_definition() {
-                unimplemented!(
-                    "Cpp bindgen does not support async functions! Namespace: {}",
-                    ci.namespace()
-                );
-            }
-
             if self.scaffolding_mode {
                 unimplemented!("Cpp scaffolding is not supported yet!");
             } else {

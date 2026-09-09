@@ -6,7 +6,7 @@
 
     rustbuffer_free(buf);
 
-    return std::move(ret);
+    return ret;
 }
 
 RustBuffer {{ ffi_converter_name }}::lower(const {{ class_name }} &val) {
@@ -15,7 +15,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ class_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ class_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -34,6 +34,7 @@ void {{ ffi_converter_name }}::write(RustStream &stream, const {{ class_name }} 
 
 uint64_t {{ ffi_converter_name }}::allocation_size(const {{ class_name }} &val) {
     {% if rec.fields().is_empty() %}
+    (void)val;
     return 0;
     {% else %}
     return {% for field in rec.fields() %}

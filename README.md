@@ -13,6 +13,12 @@ Newer Rust versions should also work fine.
 cargo install uniffi-bindgen-cpp --git https://github.com/NordSecurity/uniffi-bindgen-cpp --tag v0.8.1+v0.29.4
 ```
 
+For this UniFFI 0.31/async development branch, install directly from the checkout:
+
+```bash
+cargo install --path bindgen
+```
+
 # How to generate bindings
 
 ## Generating with a single UDL file
@@ -36,13 +42,28 @@ Regardless of the generation method, these files are produced:
 # How to integrate bindings
 
 To integrate the bindings into your projects, simply add the generated bindings files to your project.
-C++20 is required to compile the bindings.
+C++17 or newer is required to compile the bindings.
 
-# Unsupported features
+Async calls return a move-only `uniffi::Future<T>`. It supports `get()`, `wait()`, `wait_for()`,
+and `cancel()`. Destroying an incomplete future cancels it and releases the Rust future. See
+[the LiveKit integration notes](docs/LIVEKIT_INTEGRATION.md) for the migration shape and current
+tradeoffs.
 
-The following uniffi features are unsupported.
+To adapt without a blocking waiter thread, consume the future with
+`std::move(future).then(executor, callback)`. The callback receives `uniffi::FutureResult<T>` and
+the returned `uniffi::FutureContinuation` owns cancellation until completion. Destroying that
+token early cancels the Rust operation.
 
-* Async functions
+C++ implementations of async callback interfaces return `uniffi::ForeignFuture<T>`. Its start
+function receives success and failure callbacks and returns a cancellation function. The generated
+bridge accepts the first completion and ignores duplicates, allowing the implementation to use its
+own executor while preserving UniFFI typed-error and cancellation semantics.
+
+Rust-future continuations use one bounded background dispatcher by default. Before making any async
+call, applications can call `uniffi::set_async_dispatcher(dispatch, shutdown)` to use their own
+executor. Before unloading the executor or generated bindings, call
+`uniffi::shutdown_async_dispatcher()`; it rejects new continuations and waits for the registered
+shutdown function to drain accepted work.
 
 # Configuration options
 

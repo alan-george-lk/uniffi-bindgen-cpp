@@ -1,0 +1,15 @@
+[package]
+name = "uniffi-cpp-livekit-api-example"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "uniffi_cpp_livekit_api_example"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+uniffi = { git = "https://github.com/mozilla/uniffi-rs.git", tag = "v0.31.2" }
+
+# Keep this small example independently buildable instead of making it a member
+# of the generator's workspace.
+[workspace]

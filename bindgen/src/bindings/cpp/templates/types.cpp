@@ -44,6 +44,7 @@ namespace uniffi {
 {%- let cbi = ci.get_callback_interface_definition(name).unwrap() %}
 {%- let ffi_init_callback = cbi.ffi_init_callback() %}
 {%- let interface_name = name %}
+{%- let foreign_interface_name = interface_name %}
 {%- let methods = cbi.methods() %}
 {%- let vtable = cbi.vtable() %}
 {%- let vtable_methods = cbi.vtable_methods() %}

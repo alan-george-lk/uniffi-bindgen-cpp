@@ -261,7 +261,10 @@ void test_interface_in_dicts() {
     auto coveralls = coverall::Coveralls::init("test_interface_in_dicts");
 
     coveralls->add_patch(coverall::Patch::init(coverall::Color::kRed));
-    coveralls->add_repair(coverall::Repair {.when = std::chrono::system_clock::now(), .patch = coverall::Patch::init(coverall::Color::kGreen)});
+    coverall::Repair repair;
+    repair.when = std::chrono::system_clock::now();
+    repair.patch = coverall::Patch::init(coverall::Color::kGreen);
+    coveralls->add_repair(repair);
     ASSERT_EQ(2, coveralls->get_repairs().size());
 }
 
@@ -315,7 +318,7 @@ void test_dict_with_non_string_keys() {
 
 void test_return_only_dict() {
     auto d = coverall::ReturnOnlyDict{
-        .e = std::make_shared<coverall::coverall_flat_error::TooManyVariants>()
+        std::make_shared<coverall::coverall_flat_error::TooManyVariants>()
     };
     EXPECT_EXCEPTION(coverall::try_input_return_only_dict(d), std::runtime_error);
 }
@@ -447,7 +450,7 @@ void test_path() {
     ASSERT_EQ(2, traits[1]->strong_count());
 
     traits[0]->set_parent(traits[1]);
-    ASSERT_EQ(2, traits[1]->strong_count());
+    ASSERT_EQ(3, traits[1]->strong_count());
 
     ASSERT_EQ(std::vector<std::string> {"node-2"} , coverall::ancestor_names(traits[0]));
     ASSERT_EQ(std::vector<std::string> {} , coverall::ancestor_names(traits[1]));
@@ -510,6 +513,11 @@ void test_html_error() {
     EXPECT_EXCEPTION(coverall::validate_html("test"), coverall::HtmlError);
 }
 
+void test_async_function() {
+    ASSERT_EQ(true, coverall::async_bool(true).get());
+    ASSERT_EQ(false, coverall::async_bool(false).get());
+}
+
 int main() {
     test_some_dict();
     test_constructors();
@@ -533,6 +541,7 @@ int main() {
     test_round_tripping();
     test_rust_only_traits();
     test_html_error();
+    test_async_function();
 
     return 0;
 }

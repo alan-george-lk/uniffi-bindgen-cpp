@@ -14,7 +14,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ class_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -65,6 +65,7 @@ void {{ ffi_converter_name }}::write(RustStream &stream, const {{ class_name }} 
 
 uint64_t {{ ffi_converter_name }}::allocation_size(const {{ class_name }} &val) {
     {%- if e.is_flat() %}
+    (void)val;
     return static_cast<uint64_t>(sizeof(int32_t));
     {%- else %}
     switch (val.get_variant_idx()) {

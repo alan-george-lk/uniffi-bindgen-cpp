@@ -5,7 +5,7 @@
 
     rustbuffer_free(buf);
 
-    return std::move(ret);
+    return ret;
 }
 
 RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
@@ -14,7 +14,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -53,7 +53,7 @@ uint64_t {{ ffi_converter_name }}::allocation_size(const {{ type_name|class_name
 
     rustbuffer_free(buf);
 
-    return std::move(ret);
+    return ret;
 }
 
 RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
@@ -62,7 +62,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
 
     {{ ffi_converter_name }}::write(stream, val);
 
-    return std::move(buf);
+    return buf;
 }
 
 {{ type_name }} {{ ffi_converter_name }}::read(RustStream &stream) {
@@ -74,7 +74,7 @@ RustBuffer {{ ffi_converter_name }}::lower(const {{ type_name }} &val) {
     case {{ loop.index }}:
         return {{ type_name }}::{{ variant|variant_name(config.enum_style) }} {
             {%- for field in variant.fields() %}
-            .{{field.name()|var_name}} = {{ field|read_fn }}(stream),
+            {{ field|read_fn }}(stream),
             {%- endfor %}
         };
         {% endfor %}
@@ -93,7 +93,7 @@ void {{ ffi_converter_name }}::write(RustStream &stream, const {{ type_name }} &
         {%- for variant in e.variants() %}
         {% if !loop.first %}else {% endif %}if constexpr (std::is_same_v<T, {{ type_name }}::{{ variant|variant_name(config.enum_style) }}>) {
             {%- for field in variant.fields() %}
-            {{ field|write_fn }}(stream, {{ field.as_type()|cpp_deref(ci) }}arg.{{ field.name()|var_name }});
+            {{ field|write_fn }}(stream, {{ field.as_type()|cpp_deref(ci) }}arg.{% call macros::field_name(field, loop.index) %});
             {%- endfor %}
         }
         {%- endfor %}
@@ -109,12 +109,13 @@ uint64_t {{ ffi_converter_name }}::allocation_size(const {{ type_name|class_name
     uint64_t size = sizeof(int32_t);
 
     size += std::visit([&](auto &&arg) {
+        (void)arg;
         using T = std::decay_t<decltype(arg)>;
         {%- for variant in e.variants() %}
         {% if !loop.first %}else {% endif %}if constexpr (std::is_same_v<T, {{ type_name }}::{{ variant|variant_name(config.enum_style) }}>) {
             uint64_t size = 0;
             {%- for field in variant.fields() %}
-            size += {{ field|allocation_size_fn }}({{ field.as_type()|cpp_deref(ci) }}arg.{{ field.name()|var_name }});
+            size += {{ field|allocation_size_fn }}({{ field.as_type()|cpp_deref(ci) }}arg.{% call macros::field_name(field, loop.index) %});
             {%- endfor %}
             return size;
         }

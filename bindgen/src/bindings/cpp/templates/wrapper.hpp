@@ -1,11 +1,14 @@
 #pragma once
 
 #include <algorithm>
-#include <bit>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <exception>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -13,6 +16,7 @@
 #include <optional>
 #include <stdexcept>
 #include <streambuf>
+#include <thread>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -33,6 +37,13 @@
 #define UNIFFI_CPP_RUST_STREAM
 namespace uniffi {
 {% include "rust_buf_stream.cpp" %}
+}
+#endif
+
+#ifndef UNIFFI_CPP_ASYNC_FUTURE
+#define UNIFFI_CPP_ASYNC_FUTURE
+namespace uniffi {
+{% include "async.hpp" %}
 }
 #endif
 
@@ -90,6 +101,7 @@ typedef {{ type_name }} {{ name }};
 {%- let vtable = cbi.vtable() %}
 {%- let vtable_methods = cbi.vtable_methods() %}
 {%- let interface_docstring = cbi.docstring() %}
+{%- let interface_base_name = "" %}
 {% include "callback.hpp" %}
 {%- when Type::Object { module_path, name, imp } %}
 {% include "obj.hpp" %}
@@ -100,6 +112,7 @@ typedef {{ type_name }} {{ name }};
 namespace uniffi {
 using ::uniffi::RustStream;
 using ::uniffi::RustStreamBuffer;
+using ::uniffi::Future;
 {%- for converter in self.external_ffi_converters() %}
 using {{ converter }};
 {%- endfor %}
@@ -169,13 +182,13 @@ void rustbuffer_free(RustBuffer);
 {%- endfor %}
 } // namespace uniffi
 
-{%~ for func in ci.function_definitions() %}
+{% for func in ci.function_definitions() %}
 {%- call macros::docstring(func, 0) %}
-{%- match func.return_type() %}
+{% if func.is_async() %}uniffi::Future<{% endif %}{% match func.return_type() %}
 {%- when Some with (return_type) %}
-{{ return_type|type_name(ci) }} {{ func.name()|fn_name }}({% call macros::param_list(func) %});
+{{ return_type|type_name(ci) }}{% if func.is_async() %}>{% endif %} {{ func.name()|fn_name }}({% call macros::param_list(func) %});
 {%- when None %}
-void {{ func.name()|fn_name }}({% call macros::param_list(func) %});
+void{% if func.is_async() %}>{% endif %} {{ func.name()|fn_name }}({% call macros::param_list(func) %});
 {%- endmatch %}
 {%- endfor %}
 } // namespace {{ namespace }}
